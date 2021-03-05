@@ -1,0 +1,8 @@
+{
+  "philipsHueUrl": "http://127.0.0.1/api/<APIKEY>",
+  "motionSensorId": "17",
+  "lightLevelSensorId": "18",
+  "temperatureSensorId": "19",
+
+  "port": 9101
+}
