@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"net/http"
@@ -27,8 +29,18 @@ type Sensor struct {
 	}
 }
 
+type SensorReport struct {
+	Reporter string `json:"reporter"`
+	Topic string `json:"topic"`
+	Sensors map[string]string `json:"sensors"`
+}
+
 func initMetrics() {
 	go func() {
+		if config.PhilipsHueUrl == "" {
+			return
+		}
+
 		for {
 			response, err := http.Get(config.PhilipsHueUrl + "/sensors")
 			if err != nil {
@@ -57,6 +69,8 @@ func initMetrics() {
 
 				lightLevelSensor := sensorResponse[config.LightLevelSensorId]
 				lightLevelGauge.Set(float64(lightLevelSensor.State.LightLevel))
+
+				sendSensorReport(temperatureSensor, motionSensor, lightLevelSensor)
 			}
 
 			time.Sleep(10 * time.Second)
@@ -64,20 +78,70 @@ func initMetrics() {
 	}()
 }
 
+func sendSensorReport(temperatureSensor Sensor, motionSensor Sensor, lightLevelSensor Sensor) {
+
+	if config.SensorRelayUrl != "" {
+		var sensorReport = SensorReport{
+			Reporter: "hue-sensor-agent",
+			Topic:    "sensors",
+			Sensors: map[string]string{
+				"hue_temperature": fmt.Sprintf("%.2f", float32(temperatureSensor.State.Temperature)/100.0),
+				"hue_presence":    strconv.FormatBool(motionSensor.State.Presence),
+				"hue_lightlevel":  fmt.Sprintf("%d", lightLevelSensor.State.LightLevel),
+			},
+		}
+		reportJson, _ := json.Marshal(sensorReport)
+		response, err := http.Post(config.SensorRelayUrl, "application/json", bytes.NewBuffer(reportJson))
+		if err != nil {
+			println("Failed to send report: " + response.Status)
+		}
+	}
+}
+
 func initConfig(configPath string) {
 
-	file, err := os.Open(configPath)
-	if err != nil {
+	config = Config{
+		Port: 9101,
+	}
+
+	if _, err := os.Stat(configPath); err == nil {
+		file, err := os.Open(configPath)
+		if err != nil {
+			panic(err)
+		}
+
+		defer file.Close()
+
+		decoder := json.NewDecoder(file)
+		err = decoder.Decode(&config)
+		if err != nil {
+			panic(err)
+		}
+
+	} else if !os.IsNotExist(err) {
 		panic(err)
 	}
 
-	defer file.Close()
+	strEnvMap := map[string]*string {
+		"PHILIPS_HUE_URL": &config.PhilipsHueUrl,
+		"MOTION_SENSOR_ID": &config.MotionSensorId,
+		"LIGHT_LEVEL_SENSOR_ID": &config.LightLevelSensorId,
+		"TEMPERATURE_SENSOR_ID": &config.TemperatureSensorId,
+		"SENSOR_RELAY_URL": &config.SensorRelayUrl,
+	}
 
-	decoder := json.NewDecoder(file)
-	config = Config{}
-	err = decoder.Decode(&config)
-	if err != nil {
-		panic(err)
+	for key, configRef := range strEnvMap {
+		value, exist := os.LookupEnv(key)
+		if exist { *configRef = value }
+	}
+
+	intEnvMap := map[string]*int {
+		"PORT": &config.Port,
+	}
+
+	for key, configRef := range intEnvMap {
+		value, exist := os.LookupEnv(key)
+		if exist { *configRef, _ = strconv.Atoi(value) }
 	}
 }
 
@@ -102,6 +166,7 @@ type Config struct {
 	LightLevelSensorId string
 	TemperatureSensorId string
 	Port int
+	SensorRelayUrl string
 }
 
 var config Config
@@ -115,6 +180,6 @@ func main() {
 	initMetrics()
 
 	http.Handle("/metrics", promhttp.Handler())
-	fmt.Printf("Listening to :%d", config.Port)
+	fmt.Printf("Listening to :%d\n", config.Port)
 	log.Fatal("%+v\n", http.ListenAndServe(fmt.Sprintf(":%d", config.Port), nil));
 }
