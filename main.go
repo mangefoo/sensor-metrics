@@ -206,6 +206,6 @@ func main() {
 	initMetrics()
 
 	http.Handle("/metrics", promhttp.Handler())
-	logrus.Infof("Listening to :%d\n", config.Port)
+	logrus.Infof("Listening to :%d", config.Port)
 	log.Fatal("%+v\n", http.ListenAndServe(fmt.Sprintf(":%d", config.Port), nil))
 }
