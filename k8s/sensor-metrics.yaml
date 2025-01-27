@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensor-metrics
+spec:
+  selector:
+    app: sensor-metrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sensor-metrics
+  template:
+    metadata:
+      labels:
+        app: sensor-metrics
+    spec:
+      containers:
+      - image: $DOCKER_IMAGE
+        imagePullPolicy: Always
+        name: sensor-metrics-container
+      - env:
+        - name: PHILIPS_HUE_URL
+          value: $PHILIPS_HUE_URL
+        - name: MOTION_SENSOR_ID
+          value: "17"
+        - name: LIGHT_LEVEL_SENSOR_ID
+          value: "18"
+        - name: TEMPERATURE_SENSOR_ID
+          value: "19"
+        - name: SENSOR_RELAY_URL
+          value: $SENSOR_RELAY_URL
+        - name: PORT
+          value: "9101"
