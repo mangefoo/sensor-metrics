@@ -13,10 +13,10 @@ spec:
         app: sensor-metrics
     spec:
       containers:
-      - image: $DOCKER_IMAGE
+      - name: sensor-metrics-container
+        image: $DOCKER_IMAGE
         imagePullPolicy: Always
-        name: sensor-metrics-container
-      - env:
+        env:
         - name: PHILIPS_HUE_URL
           value: $PHILIPS_HUE_URL
         - name: MOTION_SENSOR_ID
